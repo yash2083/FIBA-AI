@@ -1,10 +1,32 @@
+# FIBA AI — All Dependencies
+# ============================
+# Run: pip install -r requirements.txt
+
+# Core web framework (Yash)
 flask>=2.3.0
 flask-cors>=4.0.0
-opencv-python>=4.8.0
+
+# Computer vision
+opencv-python-headless>=4.8.0
+
+# Hand detection (Atul)
 mediapipe>=0.10.0
+
+# Object detection (Atul)
 ultralytics>=8.0.0
+
+# Numerics + signal processing (Tanishk: motion engine)
 numpy>=1.24.0
 scipy>=1.11.0
-filterpy>=1.4.5
+
+# Image utilities
 Pillow>=9.0.0
-spacy>=3.8.0
+
+# NLP for query parser (Atul — optional, falls back to regex)
+# spacy>=3.8.0
+# Run after: python -m spacy download en_core_web_sm
+
+# Optional: MobileSAM for enhanced segmentation (Tanishk)
+# mobile-sam
+# torch>=2.0.0
+# torchvision>=0.15.0
