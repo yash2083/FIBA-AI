@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FIBA AI — Find-it-by-Action</title>
+  <meta name="description" content="Zero-shot edge-friendly action retrieval from video using explainable motion logic." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <!-- ============ NAVBAR ============ -->
+  <nav class="navbar" id="navbar">
+    <div class="nav-brand">
+      <div class="brand-icon">
+        <svg viewBox="0 0 32 32" fill="none">
+          <circle cx="16" cy="16" r="14" stroke="currentColor" stroke-width="2"/>
+          <path d="M10 16L14 20L22 12" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>
+      <span class="brand-text">FIBA<span class="brand-accent">AI</span></span>
+    </div>
+    <div class="nav-badge">
+      <span class="badge-dot"></span>
+      Edge · Offline · Explainable
+    </div>
+  </nav>
+
+  <!-- ============ HERO / INPUT SECTION ============ -->
+  <main class="container">
+    <header class="hero" id="hero-section">
+      <h1 class="hero-title">
+        <span class="title-line">Find it by</span>
+        <span class="title-line title-gradient">Action</span>
+      </h1>
+      <p class="hero-subtitle">
+        Upload a video, describe the action — FIBA AI will detect, track, and explain it.
+      </p>
+    </header>
+
+    <!-- ============ UPLOAD FORM ============ -->
+    <section class="upload-section" id="upload-section">
+      <div class="upload-card">
+        <div class="upload-zone" id="drop-zone">
+          <input type="file" id="video-input" accept="video/*" hidden />
+          <div class="upload-icon" id="upload-icon">
+            <svg viewBox="0 0 48 48" fill="none">
+              <rect x="4" y="8" width="40" height="28" rx="3" stroke="currentColor" stroke-width="2"/>
+              <polygon points="18,15 30,22 18,29" fill="currentColor" opacity="0.5"/>
+              <path d="M24 36v8M20 40l4 4 4-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </div>
+          <p class="upload-text" id="upload-text">
+            <strong>Drop video here</strong> or <a href="#" id="browse-link">browse files</a>
+          </p>
+          <p class="upload-hint">MP4, AVI, MOV · max ~100 MB recommended</p>
+
+          <!-- File preview -->
+          <div class="file-preview" id="file-preview" hidden>
+            <div class="file-info">
+              <svg viewBox="0 0 24 24" fill="none" width="20" height="20">
+                <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6z" stroke="currentColor" stroke-width="2"/>
+                <path d="M14 2v6h6M12 18v-6M9 15l3 3 3-3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+              </svg>
+              <span id="file-name">video.mp4</span>
+              <span id="file-size" class="file-size">0 MB</span>
+            </div>
+            <button class="file-clear" id="file-clear" title="Remove file">&times;</button>
+          </div>
+        </div>
+
+        <div class="query-row">
+          <div class="query-input-wrapper">
+            <svg class="query-icon" viewBox="0 0 24 24" fill="none" width="20" height="20">
+              <circle cx="11" cy="11" r="8" stroke="currentColor" stroke-width="2"/>
+              <path d="M21 21l-4.35-4.35" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+            <input
+              type="text"
+              id="query-input"
+              class="query-input"
+              placeholder="Describe the action — e.g., cutting onion, opening box, pouring water"
+              autocomplete="off"
+            />
+          </div>
+          <button class="process-btn" id="process-btn" disabled>
+            <span class="btn-text">Process</span>
+            <svg class="btn-arrow" viewBox="0 0 24 24" fill="none" width="18" height="18">
+              <path d="M5 12h14M12 5l7 7-7 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </button>
+        </div>
+
+        <!-- Quick examples -->
+        <div class="examples-row">
+          <span class="examples-label">Try:</span>
+          <button class="example-chip" data-query="cutting onion">🔪 cutting onion</button>
+          <button class="example-chip" data-query="opening box">📦 opening box</button>
+          <button class="example-chip" data-query="pouring water">🫗 pouring water</button>
+          <button class="example-chip" data-query="picking up bottle">🍾 picking up bottle</button>
+          <button class="example-chip" data-query="mixing ingredients">🥣 mixing ingredients</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ PROGRESS SECTION ============ -->
+    <section class="progress-section" id="progress-section" hidden>
+      <div class="progress-card">
+        <div class="progress-header">
+          <div class="progress-spinner"></div>
+          <span class="progress-title">Processing pipeline</span>
+        </div>
+        <div class="progress-bar-container">
+          <div class="progress-bar" id="progress-bar" style="width: 0%"></div>
+        </div>
+        <div class="progress-info">
+          <span class="progress-pct" id="progress-pct">0%</span>
+          <span class="progress-msg" id="progress-msg">Starting...</span>
+        </div>
+        <div class="progress-stages">
+          <div class="stage" id="stage-parse">Parse query</div>
+          <div class="stage" id="stage-detect">Detect objects</div>
+          <div class="stage" id="stage-track">Track & motion</div>
+          <div class="stage" id="stage-infer">Infer action</div>
+          <div class="stage" id="stage-render">Render output</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ RESULTS SECTION ============ -->
+    <section class="results-section" id="results-section" hidden>
+      <!-- Action Banner -->
+      <div class="result-banner" id="result-banner">
+        <div class="banner-icon" id="banner-icon"></div>
+        <div class="banner-content">
+          <h2 class="banner-title" id="banner-title">Action Detected</h2>
+          <p class="banner-subtitle" id="banner-subtitle">cutting onion</p>
+        </div>
+        <div class="banner-confidence" id="banner-confidence">
+          <div class="confidence-ring" id="confidence-ring">
+            <svg viewBox="0 0 80 80">
+              <circle cx="40" cy="40" r="35" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="5"/>
+              <circle cx="40" cy="40" r="35" fill="none" stroke="currentColor" stroke-width="5"
+                      stroke-dasharray="220" stroke-dashoffset="220" stroke-linecap="round"
+                      id="confidence-circle" />
+            </svg>
+            <span class="confidence-value" id="confidence-value">0%</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Evidence -->
+      <div class="result-card evidence-card" id="evidence-card">
+        <h3 class="card-title">
+          <svg viewBox="0 0 24 24" fill="none" width="20" height="20">
+            <path d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          Explainable Evidence
+        </h3>
+        <p class="evidence-text" id="evidence-text"></p>
+      </div>
+
+      <!-- Key Frames -->
+      <div class="result-card" id="keyframes-card">
+        <h3 class="card-title">
+          <svg viewBox="0 0 24 24" fill="none" width="20" height="20">
+            <rect x="2" y="3" width="20" height="14" rx="2" stroke="currentColor" stroke-width="2"/>
+            <path d="M8 21h8M12 17v4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+          Key Frames (with detected object + mask)
+        </h3>
+        <div class="keyframes-grid" id="keyframes-grid">
+          <!-- Will be populated by JS -->
+        </div>
+      </div>
+
+      <!-- Trajectory -->
+      <div class="result-card" id="trajectory-card">
+        <h3 class="card-title">
+          <svg viewBox="0 0 24 24" fill="none" width="20" height="20">
+            <path d="M3 17l6-6 4 4 8-8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M14 7h7v7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          Object Trajectory
+        </h3>
+        <div class="trajectory-container">
+          <img id="trajectory-img" src="" alt="Object trajectory map" class="trajectory-img" />
+        </div>
+      </div>
+
+      <!-- Motion Stats -->
+      <div class="result-card" id="motion-card">
+        <h3 class="card-title">
+          <svg viewBox="0 0 24 24" fill="none" width="20" height="20">
+            <path d="M16 8v8M12 11v5M8 14v2M4 4v16h16" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          Motion Statistics
+        </h3>
+        <div class="stats-grid" id="stats-grid">
+          <!-- Will be populated by JS -->
+        </div>
+      </div>
+
+      <!-- Query Info -->
+      <div class="result-card" id="query-card">
+        <h3 class="card-title">
+          <svg viewBox="0 0 24 24" fill="none" width="20" height="20">
+            <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2" stroke="currentColor" stroke-width="2"/>
+            <rect x="9" y="3" width="6" height="4" rx="1" stroke="currentColor" stroke-width="2"/>
+            <path d="M9 12h6M9 16h4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+          Query Analysis
+        </h3>
+        <div class="query-detail-grid" id="query-detail-grid"></div>
+      </div>
+
+      <!-- Meta / Pipeline info -->
+      <div class="result-meta" id="result-meta"></div>
+
+      <!-- New analysis -->
+      <div class="new-analysis-row">
+        <button class="process-btn secondary" id="new-analysis-btn">
+          <svg viewBox="0 0 24 24" fill="none" width="18" height="18">
+            <path d="M1 4v6h6M23 20v-6h-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M20.49 9A9 9 0 005.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 013.51 15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <span>New Analysis</span>
+        </button>
+      </div>
+    </section>
+
+    <!-- ============ ERROR SECTION ============ -->
+    <section class="error-section" id="error-section" hidden>
+      <div class="error-card">
+        <div class="error-icon">⚠️</div>
+        <h3>Pipeline Error</h3>
+        <p class="error-msg" id="error-msg"></p>
+        <button class="process-btn secondary" id="error-retry-btn">Try Again</button>
+      </div>
+    </section>
+  </main>
+
+  <!-- ============ FOOTER ============ -->
+  <footer class="footer">
+    <p>FIBA AI &middot; MIT Bangalore Hitachi Hackathon &middot; Team: Atul · Tanishk · Yash</p>
+    <p class="footer-sub">Zero-shot · Edge-friendly · Explainable action retrieval</p>
+  </footer>
+
+  <!-- ============ LIGHTBOX ============ -->
+  <div class="lightbox" id="lightbox" hidden>
+    <button class="lightbox-close" id="lightbox-close">&times;</button>
+    <img class="lightbox-img" id="lightbox-img" src="" alt="Enlarged key frame" />
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

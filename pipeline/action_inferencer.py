@@ -189,17 +189,23 @@ class ActionInferencer:
                 f"→ Rotation detected → opening inferred."
             )
 
-        # ------------------ POUR / FILL -------------------------
-        elif category in ("POUR", "FILL"):
+        # ------------------ POUR / FILL / DIP -------------------------
+        elif category in ("POUR", "FILL", "DIP"):
             # Signature:
-            #   - Container tilt (rotation)
+            #   - Container tilt (rotation) OR vertical motion (dipping)
             #   - Vertical and/or lateral displacement
             tilt_score = _norm(abs(f.rotation_change), 0, 60)
             motion_score = _norm(f.displacement_magnitude, 0, 100)
             vert_score = _norm(abs(f.vertical_motion_ratio), 0, 1.0)
-            score = 0.40 * tilt_score + 0.30 * motion_score + 0.30 * vert_score
+            
+            # DIP specifically prioritizes vertical motion
+            if category == "DIP":
+                score = 0.20 * tilt_score + 0.30 * motion_score + 0.50 * vert_score
+            else:
+                score = 0.40 * tilt_score + 0.30 * motion_score + 0.30 * vert_score
+                
             evidence = (
-                f"[POUR] Container tilt: {f.rotation_change:.0f}°; "
+                f"[{category}] Container tilt: {f.rotation_change:.0f}°; "
                 f"horizontal displacement: {f.displacement_magnitude:.0f}px; "
                 f"vertical motion ratio: {f.vertical_motion_ratio:.2f}."
             )

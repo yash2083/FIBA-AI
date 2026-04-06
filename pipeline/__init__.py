@@ -5,7 +5,7 @@ FIBA AI — Core Pipeline Package
 Module ownership:
   Atul:    query_parser, hand_detector, object_detector  (Stage 1-3)
   Tanishk: tracker, motion_engine, action_inferencer, segmentor  (Stage 4-6b)
-  Yash:    integrator (to be added)  (Orchestration + API)
+  Yash:    integrator  (Orchestration + API)
 """
 
 # --- Atul's modules (Stage 1-3) ---
@@ -24,6 +24,9 @@ from .segmentor import (
     draw_trajectory,
     annotate_key_frames,
 )
+
+# --- Yash's module (Orchestration) ---
+from .integrator import FIBAPipeline, PipelineResult
 
 __all__ = [
     # Atul
@@ -45,4 +48,7 @@ __all__ = [
     "draw_annotated_frame",
     "draw_trajectory",
     "annotate_key_frames",
+    # Yash
+    "FIBAPipeline",
+    "PipelineResult",
 ]
