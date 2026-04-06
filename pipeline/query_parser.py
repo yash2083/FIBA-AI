@@ -180,20 +180,23 @@ VERB_CATEGORY_MAP = {
     "rotating": "OPEN",
 }
 
+# NOTE: Do NOT guess tools here. Only set tool if user
+# explicitly mentions it in the query (e.g. "with knife").
+# Default is always None — prevents false information.
 CATEGORY_TOOL_MAP = {
-    "CUT": "knife",
+    "CUT": None,
     "OPEN": None,
     "POUR": None,
     "DIP": None,
     "PICK": None,
     "PLACE": None,
-    "MIX": "spoon",
+    "MIX": None,
     "CLOSE": None,
     "PUSH": None,
     "PULL": None,
     "SQUEEZE": None,
-    "SPREAD": "knife",
-    "SCOOP": "spoon",
+    "SPREAD": None,
+    "SCOOP": None,
     "WASH": None,
     "FOLD": None,
     "TEAR": None,
@@ -367,6 +370,21 @@ OBJECT_ALIASES = {
     "box": "suitcase",
     "package": "suitcase",
     "parcel": "suitcase",
+    # Spreads / condiments (often in jars/bowls)
+    "jam": "bowl",
+    "jelly": "bowl",
+    "butter": "bowl",
+    "margarine": "bowl",
+    "honey": "bottle",
+    "nutella": "bowl",
+    "cream cheese": "bowl",
+    "mayo": "bottle",
+    "mayonnaise": "bottle",
+    "syrup": "bottle",
+    "chutney": "bowl",
+    "dip": "bowl",
+    "paste": "bowl",
+    "spread": "bowl",
 }
 
 

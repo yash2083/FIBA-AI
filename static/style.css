@@ -931,3 +931,60 @@ body::before {
     padding: 24px 20px;
   }
 }
+
+
+/* ─── Action Description ───────────────────────────────── */
+.description-card {
+  border-left: 3px solid var(--accent-3);
+}
+
+.description-text {
+  font-size: 1rem;
+  line-height: 1.8;
+  color: var(--text-primary);
+  padding: 16px 20px;
+  background: var(--bg-secondary);
+  border-radius: var(--radius-sm);
+}
+
+.description-text strong {
+  color: var(--accent-3);
+  font-weight: 700;
+}
+
+
+/* ─── Edge Deployment Profile ──────────────────────────── */
+.edge-card {
+  border-left: 3px solid var(--accent-1);
+}
+
+.edge-badges {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.edge-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 14px;
+  border-radius: 100px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+}
+
+.edge-badge.active {
+  border-color: var(--success);
+  color: var(--success);
+  background: rgba(0, 184, 148, 0.08);
+}
+
+.edge-stat-value {
+  font-size: 0.95rem !important;
+}
+

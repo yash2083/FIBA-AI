@@ -1,58 +1,37 @@
 /**
- * FIBA AI — Frontend Logic
- * =========================
- * Handles: file upload, drag-drop, API calls, SSE progress, result rendering.
- * Pure vanilla JS — no React/Node dependencies.
+ * FIBA AI — Frontend Logic (Clean)
+ * ==================================
+ * Core: file upload, API, SSE progress, result rendering.
+ * No RAG, no clip extraction. Fast and focused.
  */
-
 (function () {
   "use strict";
 
-  // ─── DOM References ──────────────────────────────────────
   const $ = (sel) => document.querySelector(sel);
   const $$ = (sel) => document.querySelectorAll(sel);
 
-  const dropZone      = $("#drop-zone");
-  const videoInput     = $("#video-input");
-  const browseLink     = $("#browse-link");
-  const uploadIcon     = $("#upload-icon");
-  const uploadText     = $("#upload-text");
-  const filePreview    = $("#file-preview");
-  const fileName       = $("#file-name");
-  const fileSize       = $("#file-size");
-  const fileClear      = $("#file-clear");
-  const queryInput     = $("#query-input");
-  const processBtn     = $("#process-btn");
-  const exampleChips   = $$(".example-chip");
+  const dropZone = $("#drop-zone"), videoInput = $("#video-input");
+  const browseLink = $("#browse-link"), uploadIcon = $("#upload-icon");
+  const uploadText = $("#upload-text"), filePreview = $("#file-preview");
+  const fileName = $("#file-name"), fileSize = $("#file-size");
+  const fileClear = $("#file-clear"), queryInput = $("#query-input");
+  const processBtn = $("#process-btn"), exampleChips = $$(".example-chip");
 
-  const uploadSection  = $("#upload-section");
-  const progressSection = $("#progress-section");
-  const resultsSection = $("#results-section");
-  const errorSection   = $("#error-section");
+  const uploadSection = $("#upload-section"), progressSection = $("#progress-section");
+  const resultsSection = $("#results-section"), errorSection = $("#error-section");
+  const progressBar = $("#progress-bar"), progressPct = $("#progress-pct");
+  const progressMsg = $("#progress-msg");
 
-  const progressBar    = $("#progress-bar");
-  const progressPct    = $("#progress-pct");
-  const progressMsg    = $("#progress-msg");
+  const lightbox = $("#lightbox"), lightboxImg = $("#lightbox-img");
+  const lightboxClose = $("#lightbox-close");
+  const newAnalysisBtn = $("#new-analysis-btn"), errorRetryBtn = $("#error-retry-btn");
 
-  const lightbox       = $("#lightbox");
-  const lightboxImg    = $("#lightbox-img");
-  const lightboxClose  = $("#lightbox-close");
-
-  const newAnalysisBtn = $("#new-analysis-btn");
-  const errorRetryBtn  = $("#error-retry-btn");
-
-  // State
   let selectedFile = null;
 
-  // ─── File Selection ──────────────────────────────────────
+  // ─── File ───────────────────────────────────────────────
 
   function selectFile(file) {
-    if (!file) return;
-    // Validate type
-    if (!file.type.startsWith("video/")) {
-      alert("Please select a video file.");
-      return;
-    }
+    if (!file || !file.type.startsWith("video/")) { alert("Please select a video file."); return; }
     selectedFile = file;
     fileName.textContent = file.name;
     fileSize.textContent = formatBytes(file.size);
@@ -61,422 +40,272 @@
     uploadText.style.display = "none";
     $(".upload-hint").style.display = "none";
     dropZone.classList.add("has-file");
-    updateProcessBtn();
+    updateBtn();
   }
 
   function clearFile() {
-    selectedFile = null;
-    videoInput.value = "";
+    selectedFile = null; videoInput.value = "";
     filePreview.hidden = true;
-    uploadIcon.style.display = "";
-    uploadText.style.display = "";
+    uploadIcon.style.display = ""; uploadText.style.display = "";
     $(".upload-hint").style.display = "";
     dropZone.classList.remove("has-file");
-    updateProcessBtn();
+    updateBtn();
   }
 
-  function updateProcessBtn() {
-    processBtn.disabled = !(selectedFile && queryInput.value.trim());
-  }
+  function updateBtn() { processBtn.disabled = !(selectedFile && queryInput.value.trim()); }
+  function formatBytes(b) { return b < 1024 ? b+" B" : b < 1048576 ? (b/1024).toFixed(1)+" KB" : (b/1048576).toFixed(1)+" MB"; }
 
-  function formatBytes(bytes) {
-    if (bytes < 1024) return bytes + " B";
-    if (bytes < 1048576) return (bytes / 1024).toFixed(1) + " KB";
-    return (bytes / 1048576).toFixed(1) + " MB";
-  }
+  browseLink.addEventListener("click", e => { e.preventDefault(); videoInput.click(); });
+  videoInput.addEventListener("change", () => { if (videoInput.files[0]) selectFile(videoInput.files[0]); });
+  fileClear.addEventListener("click", e => { e.stopPropagation(); clearFile(); });
+  dropZone.addEventListener("click", e => { if (!e.target.closest(".file-preview,.file-clear") && !selectedFile) videoInput.click(); });
+  ["dragenter","dragover"].forEach(t => dropZone.addEventListener(t, e => { e.preventDefault(); dropZone.classList.add("drag-over"); }));
+  ["dragleave","drop"].forEach(t => dropZone.addEventListener(t, e => { e.preventDefault(); dropZone.classList.remove("drag-over"); }));
+  dropZone.addEventListener("drop", e => { if (e.dataTransfer.files[0]) selectFile(e.dataTransfer.files[0]); });
+  queryInput.addEventListener("input", updateBtn);
+  queryInput.addEventListener("keydown", e => { if (e.key === "Enter" && !processBtn.disabled) startProcessing(); });
+  exampleChips.forEach(c => c.addEventListener("click", () => { queryInput.value = c.dataset.query; updateBtn(); queryInput.focus(); }));
 
-  // File input
-  browseLink.addEventListener("click", (e) => {
-    e.preventDefault();
-    videoInput.click();
-  });
-
-  videoInput.addEventListener("change", () => {
-    if (videoInput.files[0]) selectFile(videoInput.files[0]);
-  });
-
-  fileClear.addEventListener("click", (e) => {
-    e.stopPropagation();
-    clearFile();
-  });
-
-  // Drop zone click
-  dropZone.addEventListener("click", (e) => {
-    if (e.target.closest(".file-preview") || e.target.closest(".file-clear")) return;
-    if (!selectedFile) videoInput.click();
-  });
-
-  // Drag and drop
-  ["dragenter", "dragover"].forEach((type) => {
-    dropZone.addEventListener(type, (e) => {
-      e.preventDefault();
-      dropZone.classList.add("drag-over");
-    });
-  });
-
-  ["dragleave", "drop"].forEach((type) => {
-    dropZone.addEventListener(type, (e) => {
-      e.preventDefault();
-      dropZone.classList.remove("drag-over");
-    });
-  });
-
-  dropZone.addEventListener("drop", (e) => {
-    const file = e.dataTransfer.files[0];
-    if (file) selectFile(file);
-  });
-
-  // Query input
-  queryInput.addEventListener("input", updateProcessBtn);
-  queryInput.addEventListener("keydown", (e) => {
-    if (e.key === "Enter" && !processBtn.disabled) startProcessing();
-  });
-
-  // Example chips
-  exampleChips.forEach((chip) => {
-    chip.addEventListener("click", () => {
-      queryInput.value = chip.dataset.query;
-      updateProcessBtn();
-      queryInput.focus();
-    });
-  });
-
-  // ─── Processing ──────────────────────────────────────────
+  // ─── Processing ─────────────────────────────────────────
 
   processBtn.addEventListener("click", startProcessing);
 
   async function startProcessing() {
     if (!selectedFile || !queryInput.value.trim()) return;
-
-    // Show progress
     showSection("progress");
-
-    const formData = new FormData();
-    formData.append("video", selectedFile);
-    formData.append("query", queryInput.value.trim());
-
+    const fd = new FormData();
+    fd.append("video", selectedFile);
+    fd.append("query", queryInput.value.trim());
     try {
-      const resp = await fetch("/api/process", {
-        method: "POST",
-        body: formData,
-      });
-
-      if (!resp.ok) {
-        const err = await resp.json();
-        throw new Error(err.error || "Upload failed");
-      }
-
+      const resp = await fetch("/api/process", { method: "POST", body: fd });
+      if (!resp.ok) throw new Error((await resp.json()).error || "Upload failed");
       const data = await resp.json();
-      const jobId = data.job_id;
-
-      // Start SSE for progress
-      pollProgress(jobId);
-    } catch (err) {
-      showError(err.message);
-    }
+      pollProgress(data.job_id);
+    } catch (err) { showError(err.message); }
   }
 
   function pollProgress(jobId) {
-    // Try SSE first, fall back to polling
-    const evtSource = new EventSource(`/api/stream/${jobId}`);
-    let lastPct = 0;
-
-    evtSource.onmessage = (event) => {
+    const es = new EventSource(`/api/stream/${jobId}`);
+    es.onmessage = (ev) => {
       try {
-        const data = JSON.parse(event.data);
-        if (data.error) {
-          evtSource.close();
-          showError(data.error);
-          return;
-        }
-
-        updateProgress(data.progress, data.message);
-        lastPct = data.progress;
-
-        if (data.done) {
-          evtSource.close();
-          // Fetch final result
-          fetchResult(jobId);
-        }
-      } catch (e) {
-        // ignore parse errors
-      }
+        const d = JSON.parse(ev.data);
+        if (d.error) { es.close(); showError(d.error); return; }
+        updateProgress(d.progress, d.message);
+        if (d.done) { es.close(); fetchResult(jobId); }
+      } catch(e) {}
     };
-
-    evtSource.onerror = () => {
-      evtSource.close();
-      // Fall back to polling
-      pollFallback(jobId);
-    };
+    es.onerror = () => { es.close(); pollFallback(jobId); };
   }
 
   async function pollFallback(jobId) {
-    const interval = setInterval(async () => {
+    const iv = setInterval(async () => {
       try {
-        const resp = await fetch(`/api/status/${jobId}`);
-        const data = await resp.json();
-
-        updateProgress(data.progress, data.message);
-
-        if (data.done) {
-          clearInterval(interval);
-          if (data.error) {
-            showError(data.error);
-          } else if (data.result) {
-            renderResults(data.result);
-          }
-        }
-      } catch (e) {
-        clearInterval(interval);
-        showError("Connection lost");
-      }
+        const d = (await (await fetch(`/api/status/${jobId}`)).json());
+        updateProgress(d.progress, d.message);
+        if (d.done) { clearInterval(iv); d.error ? showError(d.error) : d.result ? renderResults(d.result) : showError("No result"); }
+      } catch(e) { clearInterval(iv); showError("Connection lost"); }
     }, 800);
   }
 
   async function fetchResult(jobId) {
     try {
-      const resp = await fetch(`/api/status/${jobId}`);
-      const data = await resp.json();
-
-      if (data.error) {
-        showError(data.error);
-      } else if (data.result) {
-        renderResults(data.result);
-      } else {
-        showError("No result received");
-      }
-    } catch (e) {
-      showError("Failed to fetch results");
-    }
+      const d = (await (await fetch(`/api/status/${jobId}`)).json());
+      d.error ? showError(d.error) : d.result ? renderResults(d.result) : showError("No result");
+    } catch(e) { showError("Failed to fetch results"); }
   }
 
-  // ─── Progress UI ─────────────────────────────────────────
+  // ─── Progress ───────────────────────────────────────────
 
   function updateProgress(pct, msg) {
     progressBar.style.width = pct + "%";
     progressPct.textContent = pct + "%";
     progressMsg.textContent = msg || "";
-
-    // Stage indicators
-    const stages = [
-      { id: "stage-parse", min: 0, max: 15 },
-      { id: "stage-detect", min: 15, max: 45 },
-      { id: "stage-track", min: 45, max: 72 },
-      { id: "stage-infer", min: 72, max: 85 },
-      { id: "stage-render", min: 85, max: 100 },
-    ];
-
-    stages.forEach((s) => {
+    [{ id:"stage-parse",min:0,max:15 },{ id:"stage-detect",min:15,max:45 },
+     { id:"stage-track",min:45,max:72 },{ id:"stage-infer",min:72,max:85 },
+     { id:"stage-render",min:85,max:100 }].forEach(s => {
       const el = $(`#${s.id}`);
-      if (pct >= s.max) {
-        el.className = "stage done";
-      } else if (pct >= s.min) {
-        el.className = "stage active";
-      } else {
-        el.className = "stage";
-      }
+      el.className = pct >= s.max ? "stage done" : pct >= s.min ? "stage active" : "stage";
     });
   }
 
-  // ─── Results Rendering ───────────────────────────────────
+  // ─── Results ────────────────────────────────────────────
 
-  function renderResults(result) {
+  function renderResults(r) {
     showSection("results");
 
     // Banner
     const banner = $("#result-banner");
-    const bannerIcon = $("#banner-icon");
-    const bannerTitle = $("#banner-title");
-    const bannerSubtitle = $("#banner-subtitle");
-    const confidenceValue = $("#confidence-value");
-    const confidenceCircle = $("#confidence-circle");
-
-    if (result.action_detected) {
+    if (r.action_detected) {
       banner.className = "result-banner detected";
-      bannerIcon.textContent = "✅";
-      bannerTitle.textContent = "Action Detected";
-      bannerTitle.style.color = "var(--success)";
+      $("#banner-icon").textContent = "✅";
+      $("#banner-title").textContent = "Action Detected";
+      $("#banner-title").style.color = "var(--success)";
     } else {
       banner.className = "result-banner not-detected";
-      bannerIcon.textContent = "❌";
-      bannerTitle.textContent = "Not Detected";
-      bannerTitle.style.color = "var(--error)";
+      $("#banner-icon").textContent = "❌";
+      $("#banner-title").textContent = "Not Detected";
+      $("#banner-title").style.color = "var(--error)";
     }
-
-    bannerSubtitle.textContent =
-      `"${result.query_info.raw}" → ${result.action_label} (${result.action_category})`;
+    $("#banner-subtitle").textContent = `"${r.query_info.raw}" → ${r.action_label} (${r.action_category})`;
 
     // Confidence ring
-    const confPct = Math.round(result.confidence * 100);
-    confidenceValue.textContent = confPct + "%";
-    const circumference = 2 * Math.PI * 35; // r=35
-    const offset = circumference - (result.confidence * circumference);
-    confidenceCircle.style.strokeDasharray = circumference;
-
-    // Animate
+    const pct = Math.round(r.confidence * 100);
+    $("#confidence-value").textContent = pct + "%";
+    const circ = 2 * Math.PI * 35;
+    const circle = $("#confidence-circle");
+    circle.style.strokeDasharray = circ;
     requestAnimationFrame(() => {
-      confidenceCircle.style.transition = "stroke-dashoffset 1s ease";
-      confidenceCircle.style.strokeDashoffset = offset;
+      circle.style.transition = "stroke-dashoffset 1s ease";
+      circle.style.strokeDashoffset = circ - r.confidence * circ;
     });
+    circle.style.stroke = r.action_detected ? "var(--success)" : "var(--error)";
+    $("#confidence-value").style.color = r.action_detected ? "var(--success)" : "var(--error)";
 
-    if (result.action_detected) {
-      confidenceCircle.style.stroke = "var(--success)";
-      confidenceValue.style.color = "var(--success)";
-    } else {
-      confidenceCircle.style.stroke = "var(--error)";
-      confidenceValue.style.color = "var(--error)";
-    }
+    // Description
+    const desc = $("#description-text");
+    desc.innerHTML = (r.action_description || "").replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
 
     // Evidence
-    $("#evidence-text").textContent = result.evidence || "No evidence generated.";
+    $("#evidence-text").textContent = r.evidence || "No evidence.";
 
     // Key frames
     const kfGrid = $("#keyframes-grid");
     kfGrid.innerHTML = "";
-    if (result.key_frames && result.key_frames.length > 0) {
-      result.key_frames.forEach((b64, idx) => {
-        const item = document.createElement("div");
-        item.className = "keyframe-item";
-        item.innerHTML = `
-          <img src="data:image/jpeg;base64,${b64}" alt="Key frame ${idx + 1}" loading="lazy" />
-          <div class="keyframe-label">Key Frame ${idx + 1}</div>
-        `;
-        item.addEventListener("click", () => openLightbox(b64));
-        kfGrid.appendChild(item);
-      });
-    }
+    (r.key_frames || []).forEach((b64, i) => {
+      const item = document.createElement("div");
+      item.className = "keyframe-item";
+      item.innerHTML = `<img src="data:image/jpeg;base64,${b64}" alt="Key frame ${i+1}" loading="lazy"/><div class="keyframe-label">Key Frame ${i+1}</div>`;
+      item.addEventListener("click", () => openLightbox(b64));
+      kfGrid.appendChild(item);
+    });
 
     // Trajectory
-    if (result.trajectory) {
-      $("#trajectory-img").src = `data:image/jpeg;base64,${result.trajectory}`;
+    if (r.trajectory) {
+      $("#trajectory-img").src = `data:image/jpeg;base64,${r.trajectory}`;
       $("#trajectory-card").hidden = false;
-    } else {
-      $("#trajectory-card").hidden = true;
-    }
+    } else { $("#trajectory-card").hidden = true; }
 
     // Motion stats
-    renderMotionStats(result.motion_summary);
+    renderStats($("#stats-grid"), r.motion_summary, [
+      { label:"Rotation", key:"rotation_deg", unit:"°" },
+      { label:"Displacement", key:"displacement_px", unit:"px" },
+      { label:"Contact Events", key:"contact_events", unit:"" },
+      { label:"Area Change", key:"area_change_ratio", unit:"×" },
+      { label:"State Change", key:"state_change", unit:"" },
+      { label:"Vertical Motion", key:"vertical_motion", unit:"" },
+      { label:"Motion Speed", key:"motion_speed_px_per_frame", unit:"px/f" },
+      { label:"Contact Freq", key:"contact_frequency", unit:"" },
+      { label:"Approach Score", key:"approach_score", unit:"" },
+      { label:"Grasp Change", key:"grasp_change", unit:"" },
+      { label:"Area Growth", key:"area_growth_trend", unit:"" },
+    ]);
+
+    // Edge deployment stats
+    renderEdgeStats(r.edge_stats);
 
     // Query info
-    renderQueryInfo(result.query_info);
+    const qGrid = $("#query-detail-grid");
+    qGrid.innerHTML = "";
+    [{ l:"Query",v:r.query_info.raw },{ l:"Verb",v:r.query_info.verb },
+     { l:"Category",v:r.query_info.category },{ l:"Object",v:r.query_info.object },
+     { l:"Tool",v:r.query_info.tool||"—" }].forEach(f => {
+      const d = document.createElement("div");
+      d.className = "query-detail-item";
+      d.innerHTML = `<div class="query-detail-label">${f.l}</div><div class="query-detail-value">${f.v}</div>`;
+      qGrid.appendChild(d);
+    });
 
     // Meta
-    const metaParts = [];
-    if (result.total_frames) metaParts.push(`${result.total_frames} frames`);
-    if (result.fps) metaParts.push(`${result.fps.toFixed(1)} FPS`);
-    if (result.processing_time_s) metaParts.push(`processed in ${result.processing_time_s}s`);
-    $("#result-meta").textContent = metaParts.join(" · ");
+    const meta = [];
+    if (r.total_frames) meta.push(`${r.total_frames} frames`);
+    if (r.fps) meta.push(`${r.fps.toFixed(1)} FPS`);
+    if (r.processing_time_s) meta.push(`processed in ${r.processing_time_s}s`);
+    $("#result-meta").textContent = meta.join(" · ");
 
-    // Scroll to results
     resultsSection.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
-  function renderMotionStats(summary) {
-    const grid = $("#stats-grid");
+  function renderStats(grid, data, defs) {
     grid.innerHTML = "";
-
-    if (!summary) return;
-
-    const stats = [
-      { label: "Rotation", value: summary.rotation_deg, unit: "°" },
-      { label: "Displacement", value: summary.displacement_px, unit: "px" },
-      { label: "Contact Events", value: summary.contact_events, unit: "" },
-      { label: "Area Change", value: summary.area_change_ratio, unit: "×" },
-      { label: "State Change", value: summary.state_change, unit: "" },
-      { label: "Vertical Motion", value: summary.vertical_motion, unit: "" },
-      { label: "Motion Speed", value: summary.motion_speed_px_per_frame, unit: "px/f" },
-      { label: "Contact Freq", value: summary.contact_frequency, unit: "" },
-    ];
-
-    stats.forEach((s) => {
-      if (s.value == null) return;
-      const item = document.createElement("div");
-      item.className = "stat-item";
-      item.innerHTML = `
-        <div class="stat-label">${s.label}</div>
-        <div class="stat-value">${typeof s.value === "number" ? s.value.toFixed(1) : s.value}<span class="stat-unit">${s.unit}</span></div>
-      `;
-      grid.appendChild(item);
+    if (!data) return;
+    defs.forEach(d => {
+      const v = data[d.key];
+      if (v == null) return;
+      const el = document.createElement("div");
+      el.className = "stat-item";
+      el.innerHTML = `<div class="stat-label">${d.label}</div><div class="stat-value">${typeof v==="number"?v.toFixed(1):v}<span class="stat-unit">${d.unit}</span></div>`;
+      grid.appendChild(el);
     });
   }
 
-  function renderQueryInfo(info) {
-    const grid = $("#query-detail-grid");
+  function renderEdgeStats(stats) {
+    const badgesEl = $("#edge-badges");
+    const grid = $("#edge-stats-grid");
+    badgesEl.innerHTML = "";
     grid.innerHTML = "";
+    if (!stats) return;
 
-    if (!info) return;
-
-    const fields = [
-      { label: "Query", value: info.raw },
-      { label: "Verb", value: info.verb },
-      { label: "Category", value: info.category },
-      { label: "Object", value: info.object },
-      { label: "Tool", value: info.tool || "—" },
+    // Badges
+    const badges = [
+      { label: "Edge Ready", active: stats.edge_ready, icon: "📱" },
+      { label: "Zero-Shot", active: stats.zero_shot, icon: "🎯" },
+      { label: "No Cloud", active: true, icon: "🔒" },
+      { label: "Explainable", active: true, icon: "💡" },
     ];
+    badges.forEach(b => {
+      const el = document.createElement("span");
+      el.className = "edge-badge" + (b.active ? " active" : "");
+      el.textContent = `${b.icon} ${b.label}`;
+      badgesEl.appendChild(el);
+    });
 
-    fields.forEach((f) => {
-      const item = document.createElement("div");
-      item.className = "query-detail-item";
-      item.innerHTML = `
-        <div class="query-detail-label">${f.label}</div>
-        <div class="query-detail-value">${f.value}</div>
-      `;
-      grid.appendChild(item);
+    // Stats
+    const items = [
+      { label: "Pipeline Latency", value: stats.pipeline_latency_s + "s" },
+      { label: "Frame Processing", value: stats.frame_processing_s + "s" },
+      { label: "Inference", value: stats.inference_latency_s + "s" },
+      { label: "Effective FPS", value: stats.effective_fps },
+      { label: "Processed Frames", value: `${stats.processed_frames}/${stats.total_frames}` },
+      { label: "Frame Skip", value: `every ${stats.frame_skip}${stats.frame_skip > 1 ? " (adaptive)" : ""}` },
+      { label: "Resolution", value: stats.resolution },
+      { label: "Models", value: stats.models_used },
+    ];
+    items.forEach(s => {
+      const el = document.createElement("div");
+      el.className = "stat-item";
+      el.innerHTML = `<div class="stat-label">${s.label}</div><div class="stat-value edge-stat-value">${s.value}</div>`;
+      grid.appendChild(el);
     });
   }
 
-  // ─── Lightbox ────────────────────────────────────────────
+  // ─── Lightbox ───────────────────────────────────────────
 
-  function openLightbox(b64) {
-    lightboxImg.src = `data:image/jpeg;base64,${b64}`;
-    lightbox.hidden = false;
-    document.body.style.overflow = "hidden";
-  }
-
-  function closeLightbox() {
-    lightbox.hidden = true;
-    document.body.style.overflow = "";
-  }
-
+  function openLightbox(b64) { lightboxImg.src = `data:image/jpeg;base64,${b64}`; lightbox.hidden = false; document.body.style.overflow = "hidden"; }
+  function closeLightbox() { lightbox.hidden = true; document.body.style.overflow = ""; }
   lightboxClose.addEventListener("click", closeLightbox);
-  lightbox.addEventListener("click", (e) => {
-    if (e.target === lightbox) closeLightbox();
-  });
-  document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && !lightbox.hidden) closeLightbox();
-  });
+  lightbox.addEventListener("click", e => { if (e.target === lightbox) closeLightbox(); });
+  document.addEventListener("keydown", e => { if (e.key === "Escape" && !lightbox.hidden) closeLightbox(); });
 
-  // ─── Section Switching ───────────────────────────────────
+  // ─── Sections ───────────────────────────────────────────
 
   function showSection(name) {
     uploadSection.hidden = name !== "upload";
     progressSection.hidden = name !== "progress";
     resultsSection.hidden = name !== "results";
     errorSection.hidden = name !== "error";
-
-    // Keep hero visible for upload, hidden otherwise
     const hero = $("#hero-section");
     if (hero) hero.hidden = name !== "upload";
   }
 
   function resetToUpload() {
-    clearFile();
-    queryInput.value = "";
-    updateProcessBtn();
-    showSection("upload");
-    // Reset progress
-    updateProgress(0, "");
+    clearFile(); queryInput.value = ""; updateBtn();
+    showSection("upload"); updateProgress(0, "");
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
-  function showError(msg) {
-    showSection("error");
-    $("#error-msg").textContent = msg;
-  }
+  function showError(msg) { showSection("error"); $("#error-msg").textContent = msg; }
 
   newAnalysisBtn.addEventListener("click", resetToUpload);
   errorRetryBtn.addEventListener("click", resetToUpload);
-
-  // ─── Init ────────────────────────────────────────────────
   showSection("upload");
 })();

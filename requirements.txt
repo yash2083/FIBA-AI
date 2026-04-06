@@ -28,5 +28,16 @@ Pillow>=9.0.0
 
 # Optional: MobileSAM for enhanced segmentation (Tanishk)
 # mobile-sam
-# torch>=2.0.0
-# torchvision>=0.15.0
+
+# Recommended: CLIP for semantic action verification (huge accuracy boost)
+# Requires PyTorch first, then one of the CLIP packages.
+# The pipeline works without these but accuracy is significantly better with CLIP.
+torch>=2.0.0
+torchvision>=0.15.0
+
+# Option A: OpenAI CLIP (simpler)
+# pip install git+https://github.com/openai/CLIP.git
+
+# Option B: open-clip-torch (easier to install)
+open-clip-torch>=2.20.0
+
