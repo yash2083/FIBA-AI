@@ -1,113 +1,209 @@
-# FIBA AI — Find it by Action
-
+# 🏭 FIBA AI — Find it by Action
 > **Edge-Ready · Zero-Shot Action Recognition · Explainable AI · SOP Compliance Validation**
->
-> **Hackathon Domain:** AI-driven Manufacturing & Assembly Line Monitoring
-
-FIBA AI is an advanced, computer-vision architecture designed to simultaneously solve two critical challenges on the factory floor:
-1. **Action Search (Zero-Shot):** The ability to use natural language (e.g., *"Did the worker rotate the pen?"* or *"Placing the bottle"*) to search unindexed video footage for highly specific spatial interactions.
-2. **SOP Compliance:** Strict, frame-by-frame validation of ordered assembly instructions, verifying that a worker follows exact standard operating procedures (SOPs).
+> 
+> *Developed for the MIT Bangalore × Hitachi Hackathon*
 
 ---
 
-## 🧠 Web App Pipeline Methodology & Architecture
+## 📖 Project Overview
 
-The core python backend (`web_app/`) serves as the brain of the FIBA AI engine. It is completely offline-capable, highly modular, and skips black-box action foundation models in favor of an **interpretable, multi-stage modular pipeline**.
+FIBA AI is an advanced, locally-deployed computer vision platform designed specifically for the manufacturing and assembly line environment. Modern factories suffer from manual QC processes and inability to search surveillance footage contextually. FIBA AI solves this by introducing two interconnected pipelines:
 
-### 1. Zero-Shot Action Search Pipeline
-The Action Search pipeline breaks down natural language queries into physical physics-based rules, allowing it to detect actions it has never explicitly been trained on.
-
-* **NLP Query Parser (`query_parser.py`):**
-  Uses rule-based NLP (and local LLM fallbacks) to dissect physical queries (e.g., "dipping tea bag") into structural targets: 
-  * `Noun/Target`: "tea bag" (matches YOLO COCO classes and soft-aliases like "cup" or "bowl").
-  * `Action Category`: "DIP"
-* **Object Grounding (`object_detector.py`):**
-  Powered by **Ultralytics YOLOv8n**. Object detection is enhanced via a robust string-similarity algorithm and expansive semantic aliases (e.g., "water" -> "bottle", "mobile" -> "cell phone"). It implements a multi-pass architecture: if standard detection fails, it creates a custom bounding box around the worker's hands (predicting the object's likely position).
-* **Hand Kinematics (`hand_skeleton.py`):**
-  Powered by **Google MediaPipe**. Reconstructs a 21-point 3D hand skeleton per frame. Extracts physical context: Is the hand grasping? What is the distance between the fingertip vector and the target object?
-* **Physics & Motion Engine (`motion_engine.py`):**
-  The backbone of our spatial understanding. Over 20+ math-driven metrics are computed across video frames:
-  * *Displacement:* Pixel vector movement of the object.
-  * *Area Growth/Shrink:* Maps to Z-axis movement (approaching or retreating from the camera).
-  * *Grasp Openness:* Evaluates the distance between the thumb and index landmarks to determine grip closing events.
-  * *Rotation Check:* Calculates the shifting center-of-mass angle over time.
-* **Action Inferencer (`action_inferencer.py`):**
-  Uses the raw kinematics from the Motion Engine to generate a confidence score out of `1.0`. For example, a **PICK** action requires: Hand proximity + Grasp closing (negative change) + Area growth (approaching camera).
-
-### 2. Standard Operating Procedure (SOP) Validation Pipeline
-To monitor strict sequence assembly routines, FIBA AI uses specialized, heavily fine-tuned classifiers.
-
-* **The Dataset:**
-  The classifier was trained on an internally generated dataset comprising **78 video cycles** equating to thousands of frames. The dataset captures strict step-by-step actions like "Screwing", "Placing white plastic part", and "Inflating the valve".
-* **Fine-Tuning Architecture (`train_sop_classifier.py`):**
-  We fine-tuned the **YOLOv8n-cls** (Classifier architecture) directly on the extracted frames of the 7 assembly steps. Using pre-trained ImageNet weights as a base, we froze the lower convolutional layers and trained the classification heads to map localized assembly patterns.
-  * **Epochs:** 100+
-  * **Optimization:** SGD with cosine learning rate scheduling.
-  * Augmented extensively to manage varying lighting conditions and object occlusions.
-* **Temporal Consistency (`sop_validator.py`):**
-  Because individual frame classifications can be noisy (e.g., a hand blocks the camera for 3 frames), we implement a **Sliding Window Majority Vote**. This mathematically smooths predictions over a rolling frame window, ensuring the predicted SOP step is structurally stable before logging it.
-* **Sequential Verification:**
-  The pipeline compares the executed Steps (1 → 2 → 3) against a strict logical reference. Deviations or skipped steps instantly trigger an SOP violation alert.
+1. **Zero-Shot Action Search Engine:** Search factory footage using natural language (e.g., *"Placing the white plastic part"*) to instantly retrieve exact timestamps and evidence frames of complex spatial interactions.
+2. **SOP Compliance Validator:** A highly fine-tuned neural network that sequences multi-step assembly actions, strictly flagging errors, missed steps, or out-of-order procedures on the assembly line.
 
 ---
 
-## 🛠️ Tools & Tech Stack
+## 🏗️ System Architecture
 
-**Web/Backend:**
-* **Flask:** Asynchronous server acting through Server-Sent Events (SSE) to stream live progress to the frontend.
-* **PyTorch & Ultralytics:** Core backbone for fine-tuning YOLOv8 object and classification models.
-* **Google MediaPipe:** Skeletal hand tracking.
-* **OpenCV:** High-speed frame extraction and matrix manipulation.
-* **NumPy / SciPy:** Matrix math for bounding box Intersect-over-Union (IoU) and physics calculations.
+The ecosystem relies on an asynchronous Flask backend communicating strictly offline to preserve industrial data privacy. 
 
-**Android/Mobile Edge (APK):**
-* **Kotlin & Jetpack Compose:** A standalone mobile port allowing local computation.
-* **ONNX Runtime:** The fine-tuned YOLO and SOP classifiers from the Python backend were converted to `.onnx` models, allowing them to run 100% offline iteratively on Android smartphone silicon.
+```mermaid
+graph TD
+    subgraph Frontend Interfaces
+        U1[Web Dashboard]
+        U2[Standalone Android App]
+    end
+
+    subgraph FIBA API Gateway
+        F1[Flask SSE Streaming Server]
+    end
+
+    subgraph Machine Learning Pipeline
+        M1[NLP Query Parser]
+        M2[YOLOv8n Object Grounding]
+        M3[MediaPipe Spatial Skeleton]
+        M4[Heuristics Motion Engine]
+        
+        M1 --> M2
+        M2 --> M3
+        M3 --> M4
+    end
+
+    subgraph SOP Finetuned Engine
+        S1[YOLOv8n-Classifer Base]
+        S2[Temporal Sliding Window]
+        S3[Sequential Rule Engine]
+        
+        S1 --> S2
+        S2 --> S3
+    end
+
+    U1 <--> F1
+    U2 <--> F1
+    F1 --> |Zero-Shot Video| M1
+    F1 --> |Sequence Validation| S1
+```
 
 ---
 
-## 📂 Project Structure
+## 🔬 Methodology Part 1: Zero-Shot Action Pipeline
+
+Unlike black-box video foundation models, FIBA AI uses a highly interpretable, physics-based approach to decipher actions. This ensures zero latency and transparent validation metrics.
+
+### Detection Flow
+
+```mermaid
+sequenceDiagram
+    participant Worker
+    participant QueryParser as Query Parser
+    participant Detector as YOLO + MediaPipe
+    participant Physics as Motion Engine
+    participant Inferencer as Action Inferencer
+
+    Worker->>QueryParser: "rotating the pen"
+    QueryParser->>Detector: Extracts Target "pen" / Verb "rotate"
+    Detector->>Detector: Alias Map translates "pen" -> "toothbrush"
+    Detector->>Physics: YOLO Bbox + 21 Hand Landmarks
+    Physics->>Physics: Calculate Object Displacement & Angle
+    Physics->>Inferencer: Delta_X, Distance_To_Fingertip, Rotation
+    Inferencer->>Worker: Match Confidence & Timestamps
+```
+
+### Deep Dive into Pipeline Steps:
+
+1. **NLP Query Parsing (`query_parser.py`)**
+   The query parser deconstructs arbitrary queries. Because YOLO has a fixed 80-class COCO vocabulary, we implemented a semantic **Alias Expansion Bridge**. 
+   * *Example:* Query "water" soft-maps to the YOLO class "bottle". "Mobile" maps to "cell phone". 
+   
+2. **Egocentric Object Grounding (`object_detector.py`)**
+   We leverage **Ultralytics YOLOv8n**. To resolve the issue of occluded small objects heavily present in manufacturing, our detector implements a fallback loop:
+   * *Pass 1:* Standard class-filtered NMS limit detection.
+   * *Pass 2:* Expanded ROI (Region of Interest) localized exclusively around the worker's hands.
+
+3. **Hand Kinematics (`hand_skeleton.py`)**
+   Uses **Google MediaPipe** to compute the 3D distance between the wrist, thumb tip, and index tip. We extract active grasping signals by watching the Euclidean distance between landmarks 4 (Thumb) and 8 (Index Finger) shrink.
+
+4. **Physics & Motion Engine (`motion_engine.py`)**
+   Extracts 25+ mathematical metrics frame-over-frame:
+   * **Area Growth Ratio:** Maps Z-axis depth (e.g., area expanding = object approaching the camera).
+   * **Grasp Openness:** Detecting dynamic interaction statuses.
+   * **Displacement Magnitude & Consistency:** Checks if movement is linear (e.g., "Pushing") or oscillatory (e.g., "Mixing/Washing").
+
+---
+
+## 🏭 Methodology Part 2: SOP Compliance Fine-Tuning
+
+To monitor strict factory procedures (e.g., Hitachi's 7-step Valve Assembly), zero-shot methodology is too broad. We implemented a rigorously fine-tuned model.
+
+### SOP Step Validation Flow
+
+```mermaid
+graph LR
+    A[Raw Video Upload] --> B(Extract Frames @ 15fps)
+    B --> C[YOLOv8n-cls Finetuned Inference]
+    C --> D[Logits per Frame]
+    D --> E{Sliding Majority Vote}
+    E --> F[Stable Action Segment]
+    F --> G[Reference Sequence Comparison]
+    G --> H[[Compliance Alert]]
+```
+
+### Deep Dive into Finetuning Strategies:
+1. **Dataset Accumulation:** 
+   We aggregated **78 full assembly cycles**, capturing hundreds of micro-interactions. The dataset contained severe variations in lighting, background occlusion, and arm movement speed.
+2. **Model Selection & Freezing (`train_sop_classifier.py`):** 
+   We chose **YOLOv8n-C (Classification Head)** for its exceptional CPU/Edge throughput. We used pre-trained ImageNet weights, freezing the lower spatial convolutional layers and modifying the cross-entropy loss function strictly for our 7 assembly logic classes.
+3. **Temporal Stabilization (`sop_validator.py`):**
+   Raw classifications flicker. We utilized a mathematical **Sliding Window Majority Vote**. If the pipeline predicts: `[Step 1, Step 1, Step 3, Step 1, Step 1]`, the engine flattens the noise (`Step 3`) out to guarantee structural integrity before comparing it against the factory reference fingerprint.
+
+---
+
+## 🛠️ Comprehensive Tech Stack
+
+### AI & Machine Learning Backends
+- **PyTorch 2:** Primary tensor operations, gradient calculation, and SOP Model fine-tuning.
+- **Ultralytics YOLOv8:** Object detention and transfer-learning classification matrices.
+- **Google MediaPipe:** Palm detection and Hand Skeleton Landmarking.
+- **ONNX Runtime (C++ / Kotlin):** Model compilation format allowing ultra-fast execution on Edge Devices.
+
+### Computer Vision & Mathematics
+- **OpenCV (cv2):** High-speed video frame slicing, codec handling, and BGR to RGB tensor interpolations.
+- **NumPy & SciPy:** Euclidean norm operations, multi-dimensional array slicing, smoothing functions, and moving window algorithms.
+
+### Edge / Application Level
+- **Python / Flask:** High-concurrent backend streaming status to the UI using Server-Sent Events (SSE).
+- **Android / Native Kotlin:** Re-engineered standalone Edge pipeline bypassing HTTP entirely by loading compiled `.onnx` models localized on device RAM.
+
+---
+
+## 📂 Project Directory Breakdown
 
 ```text
 FIBA AI/
-├── web_app/                   # Heavy Python/Deep Learning Environment
-│   ├── app.py                 # Main Flask Server
+├── web_app/                            # Main Machine Learning & Backend Server
+│   ├── app.py                          # Flask Server (Endpoints: /api/process, /api/sop)
 │   ├── pipeline/              
-│   │   ├── motion_engine.py   # Mathematical physics processing per-frame
-│   │   ├── action_inferencer.py # Evaluates action labels from physics
-│   │   ├── object_detector.py # YOLOv8 integration and alias tracking
-│   │   ├── hand_skeleton.py   # MediaPipe pipeline
-│   │   └── sop_validator.py   # Fine-tuned classification sequencer
-│   ├── train_sop_classifier.py# Custom PyTorch YOLOv8n-cls training script
-│   └── requirements.txt       
+│   │   ├── integrator.py               # Orchestrates action & SOP methodologies
+│   │   ├── motion_engine.py            # Extracts physics vectors
+│   │   ├── action_inferencer.py        # Generates JSON action confidences
+│   │   ├── object_detector.py          # YOLO grounding
+│   │   ├── hand_skeleton.py            # MediaPipe extraction
+│   │   └── clip_extractor.py           # Subparses video based on target ROI
+│   ├── templates & static/             # Internal Web Dashboard (HTML/Vanilla CSS)
+│   ├── train_sop_classifier.py         # YOLO PyTorch Finetuning logic
+│   └── requirements.txt                # Python environment lock
 │
-├── android_apk/               # Standalone Port (Native Kotlin)
-│   ├── app/src/main/java/.../ml/  
-│   │   ├── SOPClassifier.kt   # ONNX implementation of SOP Validation
-│   │   └── YOLOClassifier.kt  # Fully native ONNX bounding-box inference
-│   └── app/build.gradle.kts   # Kotlin Build system
+├── android_apk/                        # Native Android Edge Application
+│   ├── app/src/main/assets/            # Edge Model Storage
+│   │   ├── yolov8n.onnx                # Object grounding model
+│   │   └── sop_classifier.onnx         # 7-step assembly classifier
+│   └── app/src/main/java.../ml/        # Native Kotlin implementation
+│       ├── SOPClassifier.kt            # ONNX inference execution for Assembly Sequence
+│       └── YOLOClassifier.kt           # Custom Kotlin Native Bounding Box NMS algorithm
 └── README.md
 ```
 
-## 🚀 Quick Start
+---
 
-### Python Web Environment
+## ⚙️ Setup & Local Installation
+
+### Web App & AI Engine Environment
+*Requires Python 3.9+ and pip*
+
 ```bash
 cd web_app
+
+# Create clean virtual environment
 python -m venv .venv
 
-# Activate Virtual Environment
-.venv\Scripts\activate      # Windows
-source .venv/bin/activate   # Mac/Linux
+# Activate Environment
+# Windows:
+.venv\Scripts\activate
+# Mac/Linux:
+source .venv/bin/activate
 
-# Install required deep learning systems
+# Install massive AI dependencies (PyTorch, YOLO, OpenCV)
 pip install -r requirements.txt
 
-# Run server
+# Boot the streaming dashboard
 python app.py
+# Access standard GUI via http://localhost:5000
 ```
 
-### Android Native APK
-The mobile application handles inference locally via `onnxruntime-android`. 
-* Compile the project via Android Studio.
-* Locate the debug APK in `android_apk\app\build\outputs\apk\debug\app-debug.apk`.
+### Native Android Setup
+If you wish to test the entirely standalone, 0% network usage Edge application:
+1. Open the `/android_apk/` directory directly inside **Android Studio**.
+2. Sync the Gradle files (ensuring the `onnxruntime-android` artifacts download correctly).
+3. Connect a physical Android device ensuring Developer USB Debugging is initialized.
+4. Run the Gradle build task to install the `.apk` localized.
