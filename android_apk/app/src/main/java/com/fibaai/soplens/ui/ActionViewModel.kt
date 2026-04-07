@@ -10,6 +10,7 @@ import androidx.lifecycle.viewModelScope
 import com.fibaai.soplens.ml.SOPClassifier
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import com.fibaai.soplens.ml.YOLOClassifier
 
 /**
  * Represents an action detected in a video frame.
@@ -142,8 +143,8 @@ class ActionViewModel : ViewModel() {
         val durationMs = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLong() ?: 0
         val fps = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_CAPTURE_FRAMERATE)?.toFloat() ?: 30f
 
-        // Sample at ~2 fps
-        val sampleRate = (fps / 2.0).toInt().coerceAtLeast(1)
+        // Sample at ~15 fps instead of 2 fps for accurate tracking
+        val sampleRate = (fps / 15.0).toInt().coerceAtLeast(1)
         val stepUs = (1_000_000.0 / fps * sampleRate).toLong()
         val frameTimes = mutableListOf<Long>()
         var timeUs = 0L
@@ -156,19 +157,74 @@ class ActionViewModel : ViewModel() {
         progress = 10
 
         val actions = mutableListOf<DetectedAction>()
+        var yoloClassifier: YOLOClassifier? = null
+        try {
+            yoloClassifier = YOLOClassifier(context)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+
+        // To track object motion (yolo class -> previous center X,Y)
+        val objectHistory = mutableMapOf<Int, Pair<Float, Float>>()
 
         for ((idx, timeUs2) in frameTimes.withIndex()) {
             val frame = retriever.getFrameAtTime(timeUs2, MediaMetadataRetriever.OPTION_CLOSEST)
             if (frame != null) {
+                // 1. SOP Classifier (Original 7 classes)
                 val (taskId, conf) = classifier.classifyFrame(frame)
-                actions.add(DetectedAction(
-                    frameIndex = idx,
-                    timeMs = timeUs2 / 1000,
-                    taskId = taskId,
-                    taskName = SOPClassifier.TASK_NAMES.getOrElse(taskId) { "Unknown" },
-                    confidence = conf,
-                    thumbnail = Bitmap.createScaledBitmap(frame, 160, 120, true)
-                ))
+                var taskName = SOPClassifier.TASK_NAMES.getOrElse(taskId) { "Unknown" }
+                
+                // 2. YOLO Classifier (Generic object motion tracking)
+                var yoloDetectedAction = ""
+                var yoloConf = 0f
+                if (yoloClassifier != null) {
+                    val detections = yoloClassifier.detect(frame)
+                    for (det in detections) {
+                        val cx = (det.x1 + det.x2) / 2f
+                        val cy = (det.y1 + det.y2) / 2f
+                        
+                        val prev = objectHistory[det.classId]
+                        if (prev != null) {
+                            val dx = cx - prev.first
+                            val dy = cy - prev.second
+                            val dist = Math.sqrt((dx*dx + dy*dy).toDouble())
+                            // If object moved significantly across frames
+                            if (dist > 0.01) { // 1% of frame dimension
+                                yoloDetectedAction = "Rotating/Moving ${det.className}"
+                            } else {
+                                yoloDetectedAction = "Detected ${det.className}"
+                            }
+                            yoloConf = det.confidence
+                        } else {
+                            yoloDetectedAction = "Detected ${det.className}"
+                            yoloConf = det.confidence
+                        }
+                        objectHistory[det.classId] = Pair(cx, cy)
+                    }
+                }
+                
+                // If YOLO detected meaningful action, append it. Otherwise use SOP.
+                if (yoloDetectedAction.isNotEmpty() && yoloConf > 0.15f) {
+                    taskName = yoloDetectedAction
+                    // Override conf to surface it
+                    actions.add(DetectedAction(
+                        frameIndex = idx,
+                        timeMs = timeUs2 / 1000,
+                        taskId = 99, 
+                        taskName = taskName,
+                        confidence = yoloConf,
+                        thumbnail = Bitmap.createScaledBitmap(frame, 160, 120, true)
+                    ))
+                } else if (conf > 0.5f && taskId != 7) {
+                    actions.add(DetectedAction(
+                        frameIndex = idx,
+                        timeMs = timeUs2 / 1000,
+                        taskId = taskId,
+                        taskName = taskName,
+                        confidence = conf,
+                        thumbnail = Bitmap.createScaledBitmap(frame, 160, 120, true)
+                    ))
+                }
             }
             val pct = 10 + (idx * 70 / frameTimes.size.coerceAtLeast(1))
             if (idx % 5 == 0) {
@@ -177,6 +233,7 @@ class ActionViewModel : ViewModel() {
             }
         }
 
+        yoloClassifier?.close()
         retriever.release()
         return actions
     }
@@ -185,6 +242,35 @@ class ActionViewModel : ViewModel() {
      * Fuzzy match query keywords to action names.
      */
     private fun matchesActionKeywords(query: String, taskName: String): Boolean {
+        // Special case for generic YOLO detected actions
+        val qLower = query.lowercase()
+        val tLower = taskName.lowercase()
+        if (tLower.startsWith("rotating/moving") || tLower.startsWith("detected")) {
+            // Check if query mentions the object
+            // Extract the object name
+            val obj = if (tLower.startsWith("rotating/moving")) {
+                tLower.removePrefix("rotating/moving").trim()
+            } else {
+                tLower.removePrefix("detected").trim()
+            }
+            if (qLower.contains(obj)) return true
+            
+            // Allow fuzzy mapping for "mobile", "water", "pen"
+            if (qLower.contains("water") && (obj == "bottle" || obj == "cup" || obj == "vase")) return true
+            if (qLower.contains("tea") && (obj == "cup" || obj == "bowl" || obj == "bottle")) return true
+            if (qLower.contains("pen") && (obj == "toothbrush" || obj == "scissors")) return true
+            if (qLower.contains("mobile") && (obj == "cell phone" || obj == "remote")) return true
+            if (qLower.contains("phone") && obj == "cell phone") return true
+            if (qLower.contains("screw") && obj == "scissors") return true
+            if (qLower.contains("hotdog") && (obj == "hot dog" || obj == "sandwich" || obj == "carrot")) return true
+            if (qLower.contains("hot dog") && obj == "hot dog") return true
+            
+            // If the query contains "rotating" or "moving" and matches the object
+            if ((qLower.contains("rotat") || qLower.contains("mov")) && (qLower.contains("pen") || qLower.contains("water"))) {
+                return true
+            }
+        }
+
         val keywordMap = mapOf(
             "screw" to listOf("Screwing-1", "Screwing-2"),
             "spring" to listOf("Assembling the spring"),
@@ -201,7 +287,7 @@ class ActionViewModel : ViewModel() {
         )
 
         for ((keyword, matchNames) in keywordMap) {
-            if (query.contains(keyword) && matchNames.any { it == taskName }) {
+            if (qLower.contains(keyword) && matchNames.any { it.lowercase() == tLower }) {
                 return true
             }
         }
